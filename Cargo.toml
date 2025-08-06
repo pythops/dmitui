@@ -1,0 +1,22 @@
+[package]
+name = "dmitui"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+description = "DmiTui"
+readme = "README.md"
+homepage = "https://github.com/pythops/dmitui"
+repository = "https://github.com/pythops/dmitui"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.29"
+anyhow = "1"
+clap = { version = "4", features = ["derive", "cargo"] }
+libc = "0.2"
+uuid = "1"
+
+[profile.release]
+lto = "fat"
+strip = true
+codegen-units = 1
