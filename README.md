@@ -9,7 +9,7 @@
 
 <br>
 
-## What is demidecode ?
+## What is dmidecode ?
 
 From `dmidecode` man page:
 
@@ -17,7 +17,7 @@ From `dmidecode` man page:
 
 ## Why dmitui then ?
 
-`dmitui` is a TUI (Text User Interface) version that allows for easy navigation between sections, unlike `demidecode`, which requires you to specify the section as a command-line option. Additionally, `dmitui` presents information in a well-organized and visually appealing manner.
+`dmitui` is a TUI (Text User Interface) version that allows for easy navigation between sections, unlike `dmidecode`, which requires you to specify the section as a command-line option. Additionally, `dmitui` presents information in a well-organized and visually appealing manner.
 
 ## 💡 Prerequisites
 
