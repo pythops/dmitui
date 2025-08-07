@@ -6,6 +6,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufRead, BufReader, Read},
+    path::Path,
 };
 
 use anyhow::{Result, bail};
@@ -81,6 +82,16 @@ impl DMI {
         let mut firmware: Option<Firmware> = None;
         let mut system: Option<System> = None;
         let mut baseboard: Option<Baseboard> = None;
+
+        let dmi_file_path = Path::new("/sys/firmware/dmi/tables/DMI");
+
+        match dmi_file_path.try_exists() {
+            Ok(true) => {}
+            Ok(false) | Err(_) => {
+                eprintln!("No SMBIOS found");
+                std::process::exit(1);
+            }
+        }
 
         let mem_file = File::open("/sys/firmware/dmi/tables/DMI")?;
         let mut file = BufReader::new(mem_file);
