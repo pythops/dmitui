@@ -1,3 +1,4 @@
+mod baseboard;
 mod firmware;
 mod system;
 
@@ -9,6 +10,7 @@ use std::{
 
 use anyhow::{Result, bail};
 
+use crate::dmi::baseboard::Baseboard;
 use crate::dmi::firmware::Firmware;
 use crate::dmi::system::System;
 
@@ -25,6 +27,7 @@ use ratatui::{
 pub struct DMI {
     firmware: Firmware,
     system: System,
+    baseboard: Baseboard,
     pub focused_section: FocusedSection,
 }
 
@@ -33,6 +36,7 @@ pub struct DMI {
 pub enum FocusedSection {
     Firmware,
     System,
+    Baseboard,
 }
 
 #[derive(Debug)]
@@ -47,6 +51,7 @@ impl From<[u8; 4]> for Header {
         let structure_type = match value[0] {
             0 => StructureType::Firmware,
             1 => StructureType::System,
+            2 => StructureType::Baseboard,
             127 => StructureType::End,
             _ => StructureType::Other,
         };
@@ -64,6 +69,7 @@ impl From<[u8; 4]> for Header {
 pub enum StructureType {
     Firmware = 0,
     System = 1,
+    Baseboard = 2,
     End = 127,
     Other = 255,
 }
@@ -74,6 +80,7 @@ impl DMI {
     pub fn new() -> Result<Self> {
         let mut firmware: Option<Firmware> = None;
         let mut system: Option<System> = None;
+        let mut baseboard: Option<Baseboard> = None;
 
         let mem_file = File::open("/sys/firmware/dmi/tables/DMI")?;
         let mut file = BufReader::new(mem_file);
@@ -128,6 +135,9 @@ impl DMI {
                 StructureType::System => {
                     system = Some(System::from((data, text)));
                 }
+                StructureType::Baseboard => {
+                    baseboard = Some(Baseboard::from((data, text)));
+                }
                 _ => {}
             }
         }
@@ -135,6 +145,7 @@ impl DMI {
         Ok(Self {
             firmware: firmware.unwrap(),
             system: system.unwrap(),
+            baseboard: baseboard.unwrap(),
             focused_section: FocusedSection::Firmware,
         })
     }
@@ -145,11 +156,13 @@ impl DMI {
             KeyCode::Down | KeyCode::Char('j') => {}
             KeyCode::Tab => match self.focused_section {
                 FocusedSection::Firmware => self.focused_section = FocusedSection::System,
-                FocusedSection::System => self.focused_section = FocusedSection::Firmware,
+                FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
+                FocusedSection::Baseboard => self.focused_section = FocusedSection::Firmware,
             },
             KeyCode::BackTab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::System,
+                FocusedSection::Firmware => self.focused_section = FocusedSection::Baseboard,
                 FocusedSection::System => self.focused_section = FocusedSection::Firmware,
+                FocusedSection::Baseboard => self.focused_section = FocusedSection::System,
             },
             _ => {}
         }
@@ -178,6 +191,16 @@ impl DMI {
                     Span::from("  System  ").fg(Color::DarkGray)
                 }
             }
+            FocusedSection::Baseboard => {
+                if is_focused {
+                    Span::styled(
+                        "  Baseboard  ",
+                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                    )
+                } else {
+                    Span::from("  Baseboard  ").fg(Color::DarkGray)
+                }
+            }
         }
     }
 
@@ -197,6 +220,7 @@ impl DMI {
                 .title(Line::from(vec![
                     self.title_span(FocusedSection::Firmware),
                     self.title_span(FocusedSection::System),
+                    self.title_span(FocusedSection::Baseboard),
                 ]))
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
@@ -220,6 +244,9 @@ impl DMI {
             }
             FocusedSection::System => {
                 self.system.render(frame, section_block);
+            }
+            FocusedSection::Baseboard => {
+                self.baseboard.render(frame, section_block);
             }
         }
     }

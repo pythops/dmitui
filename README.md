@@ -47,6 +47,7 @@ sudo dmitui
 
 - [x] Firmware (type 0)
 - [x] System (type 1)
+- [x] Baseboard (type 2)
 
 ## ⚖️ License
 
