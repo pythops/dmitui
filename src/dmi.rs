@@ -1,4 +1,5 @@
 mod baseboard;
+mod chassis;
 mod firmware;
 mod system;
 
@@ -12,6 +13,7 @@ use std::{
 use anyhow::{Result, bail};
 
 use crate::dmi::baseboard::Baseboard;
+use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
 use crate::dmi::system::System;
 
@@ -29,6 +31,7 @@ pub struct DMI {
     firmware: Firmware,
     system: System,
     baseboard: Baseboard,
+    chassis: Chassis,
     pub focused_section: FocusedSection,
 }
 
@@ -38,6 +41,7 @@ pub enum FocusedSection {
     Firmware,
     System,
     Baseboard,
+    Chassis,
 }
 
 #[derive(Debug)]
@@ -53,6 +57,7 @@ impl From<[u8; 4]> for Header {
             0 => StructureType::Firmware,
             1 => StructureType::System,
             2 => StructureType::Baseboard,
+            3 => StructureType::Chassis,
             127 => StructureType::End,
             _ => StructureType::Other,
         };
@@ -71,6 +76,7 @@ pub enum StructureType {
     Firmware = 0,
     System = 1,
     Baseboard = 2,
+    Chassis = 3,
     End = 127,
     Other = 255,
 }
@@ -82,6 +88,7 @@ impl DMI {
         let mut firmware: Option<Firmware> = None;
         let mut system: Option<System> = None;
         let mut baseboard: Option<Baseboard> = None;
+        let mut chassis: Option<Chassis> = None;
 
         let dmi_file_path = Path::new("/sys/firmware/dmi/tables/DMI");
 
@@ -149,6 +156,9 @@ impl DMI {
                 StructureType::Baseboard => {
                     baseboard = Some(Baseboard::from((data, text)));
                 }
+                StructureType::Chassis => {
+                    chassis = Some(Chassis::from((data, text)));
+                }
                 _ => {}
             }
         }
@@ -157,6 +167,7 @@ impl DMI {
             firmware: firmware.unwrap(),
             system: system.unwrap(),
             baseboard: baseboard.unwrap(),
+            chassis: chassis.unwrap(),
             focused_section: FocusedSection::Firmware,
         })
     }
@@ -168,12 +179,14 @@ impl DMI {
             KeyCode::Tab => match self.focused_section {
                 FocusedSection::Firmware => self.focused_section = FocusedSection::System,
                 FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
-                FocusedSection::Baseboard => self.focused_section = FocusedSection::Firmware,
+                FocusedSection::Baseboard => self.focused_section = FocusedSection::Chassis,
+                FocusedSection::Chassis => self.focused_section = FocusedSection::Firmware,
             },
             KeyCode::BackTab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::Baseboard,
+                FocusedSection::Firmware => self.focused_section = FocusedSection::Chassis,
                 FocusedSection::System => self.focused_section = FocusedSection::Firmware,
                 FocusedSection::Baseboard => self.focused_section = FocusedSection::System,
+                FocusedSection::Chassis => self.focused_section = FocusedSection::Baseboard,
             },
             _ => {}
         }
@@ -212,6 +225,16 @@ impl DMI {
                     Span::from("  Baseboard  ").fg(Color::DarkGray)
                 }
             }
+            FocusedSection::Chassis => {
+                if is_focused {
+                    Span::styled(
+                        "  Chassis  ",
+                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                    )
+                } else {
+                    Span::from("  Chassis  ").fg(Color::DarkGray)
+                }
+            }
         }
     }
 
@@ -232,6 +255,7 @@ impl DMI {
                     self.title_span(FocusedSection::Firmware),
                     self.title_span(FocusedSection::System),
                     self.title_span(FocusedSection::Baseboard),
+                    self.title_span(FocusedSection::Chassis),
                 ]))
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
@@ -258,6 +282,9 @@ impl DMI {
             }
             FocusedSection::Baseboard => {
                 self.baseboard.render(frame, section_block);
+            }
+            FocusedSection::Chassis => {
+                self.chassis.render(frame, section_block);
             }
         }
     }
