@@ -4,7 +4,6 @@ mod firmware;
 mod system;
 
 use std::{
-    fmt::Display,
     fs::File,
     io::{BufRead, BufReader, Read},
     path::Path,
@@ -58,6 +57,7 @@ impl From<[u8; 4]> for Header {
             1 => StructureType::System,
             2 => StructureType::Baseboard,
             3 => StructureType::Chassis,
+            13 => StructureType::FirmwareLanguage,
             127 => StructureType::End,
             _ => StructureType::Other,
         };
@@ -77,6 +77,7 @@ pub enum StructureType {
     System = 1,
     Baseboard = 2,
     Chassis = 3,
+    FirmwareLanguage = 13,
     End = 127,
     Other = 255,
 }
@@ -158,6 +159,13 @@ impl DMI {
                 }
                 StructureType::Chassis => {
                     chassis = Some(Chassis::from((data, text)));
+                }
+                StructureType::FirmwareLanguage => {
+                    let language_infos = firmware::LanguageInfos::from((data, text));
+
+                    if let Some(firmware) = &mut firmware {
+                        firmware.language_infos = Some(language_infos);
+                    }
                 }
                 _ => {}
             }
@@ -287,37 +295,5 @@ impl DMI {
                 self.chassis.render(frame, section_block);
             }
         }
-    }
-}
-
-#[non_exhaustive]
-#[derive(Debug, PartialEq)]
-pub enum SmbiosType {
-    Firmware,
-    System,
-    Baseboard,
-    Chassis,
-    Processor,
-    Memory,
-    Cache,
-    Connector,
-    Slot,
-}
-
-#[derive(Debug)]
-pub struct Release {
-    pub major: u8,
-    pub minor: u8,
-}
-
-impl Release {
-    fn new(major: u8, minor: u8) -> Self {
-        Self { major, minor }
-    }
-}
-
-impl Display for Release {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}.{}", self.major, self.minor)
     }
 }

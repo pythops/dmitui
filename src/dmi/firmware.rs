@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
@@ -5,7 +7,40 @@ use ratatui::{
     widgets::{Block, Cell, Padding, Row, Table},
 };
 
-use crate::dmi::Release;
+#[derive(Debug)]
+pub struct Release {
+    pub major: u8,
+    pub minor: u8,
+}
+
+impl Release {
+    fn new(major: u8, minor: u8) -> Self {
+        Self { major, minor }
+    }
+}
+
+impl Display for Release {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}", self.major, self.minor)
+    }
+}
+
+#[derive(Debug)]
+pub struct LanguageInfos {
+    installed_languages: u8,
+    abbreviated_format_is_used: bool,
+    current_language: String,
+}
+
+impl From<(Vec<u8>, Vec<String>)> for LanguageInfos {
+    fn from((data, text): (Vec<u8>, Vec<String>)) -> Self {
+        Self {
+            installed_languages: data[0],
+            abbreviated_format_is_used: data[1] << 1 != 0,
+            current_language: text[data[17].saturating_sub(1) as usize].clone(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Firmware {
@@ -18,6 +53,7 @@ pub struct Firmware {
     pub firmware_characteristics_exentions: FirmwareCharacteristicsExtension,
     pub platform_firmware_release: Release,
     pub embedded_controller_firmware_release: Release,
+    pub language_infos: Option<LanguageInfos>,
 }
 
 impl From<(Vec<u8>, Vec<String>, u8)> for Firmware {
@@ -55,6 +91,7 @@ impl From<(Vec<u8>, Vec<String>, u8)> for Firmware {
             ]),
             platform_firmware_release: Release::new(data[16], data[17]),
             embedded_controller_firmware_release: Release::new(data[18], data[19]),
+            language_infos: None,
         }
     }
 }
@@ -98,6 +135,41 @@ impl Firmware {
             Row::new(vec![
                 Cell::from("Firmware ROM size").bold(),
                 Cell::from(self.firmware_rom_size.clone()),
+            ]),
+            Row::new(vec![
+                Cell::from("Installable Languages").bold(),
+                Cell::from(
+                    self.language_infos
+                        .as_ref()
+                        .unwrap()
+                        .installed_languages
+                        .to_string(),
+                ),
+            ]),
+            Row::new(vec![
+                Cell::from("Language Description Format").bold(),
+                Cell::from(
+                    if self
+                        .language_infos
+                        .as_ref()
+                        .unwrap()
+                        .abbreviated_format_is_used
+                    {
+                        "Abbreviated".to_string()
+                    } else {
+                        "Long format".to_string()
+                    },
+                ),
+            ]),
+            Row::new(vec![
+                Cell::from("Current Language").bold(),
+                Cell::from(
+                    self.language_infos
+                        .as_ref()
+                        .unwrap()
+                        .current_language
+                        .clone(),
+                ),
             ]),
         ];
         let widths = [Constraint::Length(40), Constraint::Fill(1)];
