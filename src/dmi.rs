@@ -207,7 +207,7 @@ impl DMI {
                 if is_focused {
                     Span::styled(
                         "  Firmware  ",
-                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
                     Span::from("  Firmware  ").fg(Color::DarkGray)
@@ -217,7 +217,7 @@ impl DMI {
                 if is_focused {
                     Span::styled(
                         "  System  ",
-                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
                     Span::from("  System  ").fg(Color::DarkGray)
@@ -227,7 +227,7 @@ impl DMI {
                 if is_focused {
                     Span::styled(
                         "  Baseboard  ",
-                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
                     Span::from("  Baseboard  ").fg(Color::DarkGray)
@@ -237,7 +237,7 @@ impl DMI {
                 if is_focused {
                     Span::styled(
                         "  Chassis  ",
-                        Style::default().bg(Color::Yellow).fg(Color::White).bold(),
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
                     )
                 } else {
                     Span::from("  Chassis  ").fg(Color::DarkGray)
