@@ -195,8 +195,6 @@ impl DMI {
 
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         match key_event.code {
-            KeyCode::Up | KeyCode::Char('k') => {}
-            KeyCode::Down | KeyCode::Char('j') => {}
             KeyCode::Tab => match self.focused_section {
                 FocusedSection::Firmware => self.focused_section = FocusedSection::System,
                 FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
@@ -301,9 +299,7 @@ impl DMI {
         );
 
         // Help banner
-        let message = Line::from("↑,k : Up | ↓,j : Down | ⇆ : Navigation")
-            .centered()
-            .cyan();
+        let message = Line::from("⇆ : Navigation").centered().cyan();
 
         frame.render_widget(message, help_block);
 
