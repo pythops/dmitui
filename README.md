@@ -50,6 +50,7 @@ sudo dmitui
 - [x] Baseboard (type 2)
 - [x] Chassis (type 3) (Partially)
 - [x] Firmware Language Information (type 13)
+- [x] Physical Memory Array (type 16)
 
 ## ⚖️ License
 
