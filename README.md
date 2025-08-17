@@ -51,6 +51,7 @@ sudo dmitui
 - [x] Chassis (type 3) (Partially)
 - [x] Firmware Language Information (type 13)
 - [x] Physical Memory Array (type 16)
+- [x] Portable Battery (type 22)
 
 ## ⚖️ License
 

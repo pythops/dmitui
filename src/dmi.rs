@@ -1,4 +1,5 @@
 mod baseboard;
+mod battery;
 mod chassis;
 mod firmware;
 mod memory;
@@ -13,6 +14,7 @@ use std::{
 use anyhow::{Result, bail};
 
 use crate::dmi::baseboard::Baseboard;
+use crate::dmi::battery::Battery;
 use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
 use crate::dmi::memory::{Memory, PhysicalMemoryArray};
@@ -34,6 +36,7 @@ pub struct DMI {
     baseboard: Baseboard,
     chassis: Chassis,
     memory: Memory,
+    battery: Battery,
     pub focused_section: FocusedSection,
 }
 
@@ -45,6 +48,7 @@ pub enum FocusedSection {
     Baseboard,
     Chassis,
     Memory,
+    Battery,
 }
 
 #[derive(Debug)]
@@ -63,6 +67,7 @@ impl From<[u8; 4]> for Header {
             3 => StructureType::Chassis,
             13 => StructureType::FirmwareLanguage,
             16 => StructureType::PhysicalMemoryArray,
+            22 => StructureType::Battery,
             127 => StructureType::End,
             _ => StructureType::Other,
         };
@@ -84,6 +89,7 @@ pub enum StructureType {
     Chassis = 3,
     FirmwareLanguage = 13,
     PhysicalMemoryArray = 16,
+    Battery = 22,
     End = 127,
     Other = 255,
 }
@@ -97,6 +103,7 @@ impl DMI {
         let mut baseboard: Option<Baseboard> = None;
         let mut chassis: Option<Chassis> = None;
         let mut memory: Option<Memory> = None;
+        let mut battery: Option<Battery> = None;
 
         let dmi_file_path = Path::new("/sys/firmware/dmi/tables/DMI");
 
@@ -179,6 +186,9 @@ impl DMI {
                         physical_memory_array: PhysicalMemoryArray::from(data.as_slice()),
                     });
                 }
+                StructureType::Battery => {
+                    battery = Some(Battery::from((data, text)));
+                }
                 _ => {}
             }
         }
@@ -189,6 +199,7 @@ impl DMI {
             baseboard: baseboard.unwrap(),
             chassis: chassis.unwrap(),
             memory: memory.unwrap(),
+            battery: battery.unwrap(),
             focused_section: FocusedSection::Firmware,
         })
     }
@@ -200,14 +211,16 @@ impl DMI {
                 FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
                 FocusedSection::Baseboard => self.focused_section = FocusedSection::Chassis,
                 FocusedSection::Chassis => self.focused_section = FocusedSection::Memory,
-                FocusedSection::Memory => self.focused_section = FocusedSection::Firmware,
+                FocusedSection::Memory => self.focused_section = FocusedSection::Battery,
+                FocusedSection::Battery => self.focused_section = FocusedSection::Firmware,
             },
             KeyCode::BackTab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::Memory,
+                FocusedSection::Firmware => self.focused_section = FocusedSection::Battery,
                 FocusedSection::System => self.focused_section = FocusedSection::Firmware,
                 FocusedSection::Baseboard => self.focused_section = FocusedSection::System,
                 FocusedSection::Chassis => self.focused_section = FocusedSection::Baseboard,
                 FocusedSection::Memory => self.focused_section = FocusedSection::Chassis,
+                FocusedSection::Battery => self.focused_section = FocusedSection::Memory,
             },
             _ => {}
         }
@@ -266,6 +279,16 @@ impl DMI {
                     Span::from("  Memory  ").fg(Color::DarkGray)
                 }
             }
+            FocusedSection::Battery => {
+                if is_focused {
+                    Span::styled(
+                        "  Battery  ",
+                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+                    )
+                } else {
+                    Span::from("  Battery  ").fg(Color::DarkGray)
+                }
+            }
         }
     }
 
@@ -288,6 +311,7 @@ impl DMI {
                     self.title_span(FocusedSection::Baseboard),
                     self.title_span(FocusedSection::Chassis),
                     self.title_span(FocusedSection::Memory),
+                    self.title_span(FocusedSection::Battery),
                 ]))
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
@@ -318,6 +342,9 @@ impl DMI {
             }
             FocusedSection::Memory => {
                 self.memory.render(frame, section_block);
+            }
+            FocusedSection::Battery => {
+                self.battery.render(frame, section_block);
             }
         }
     }
