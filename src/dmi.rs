@@ -36,7 +36,7 @@ pub struct DMI {
     baseboard: Baseboard,
     chassis: Chassis,
     memory: Memory,
-    battery: Battery,
+    battery: Option<Battery>,
     pub focused_section: FocusedSection,
 }
 
@@ -199,7 +199,7 @@ impl DMI {
             baseboard: baseboard.unwrap(),
             chassis: chassis.unwrap(),
             memory: memory.unwrap(),
-            battery: battery.unwrap(),
+            battery,
             focused_section: FocusedSection::Firmware,
         })
     }
@@ -344,7 +344,9 @@ impl DMI {
                 self.memory.render(frame, section_block);
             }
             FocusedSection::Battery => {
-                self.battery.render(frame, section_block);
+                if let Some(battery) = &self.battery {
+                    battery.render(frame, section_block);
+                }
             }
         }
     }
