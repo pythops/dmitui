@@ -119,7 +119,7 @@ impl Battery {
                 Cell::from("Design Voltage").bold(),
                 Cell::from({
                     if let Some(v) = self.design_voltage {
-                        format!("{v} mWV")
+                        format!("{v} mV")
                     } else {
                         "Unknown".to_string()
                     }
