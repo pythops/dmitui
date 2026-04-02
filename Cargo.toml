@@ -9,13 +9,13 @@ homepage = "https://github.com/pythops/dmitui"
 repository = "https://github.com/pythops/dmitui"
 
 [dependencies]
-ratatui = "0.29"
+ratatui = "0.30"
 crossterm = "0.29"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "cargo"] }
 libc = "0.2"
 uuid = "1"
-strum = { version = "0.27", features = ["derive"] }
+strum = { version = "0.27.2", features = ["derive"] }
 
 [profile.release]
 lto = "fat"

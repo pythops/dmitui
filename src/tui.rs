@@ -19,7 +19,11 @@ impl<B: Backend> Tui<B> {
         Self { terminal, events }
     }
 
-    pub fn init(&mut self) -> Result<()> {
+    pub fn init(&mut self) -> Result<()>
+    where
+        <B as Backend>::Error: Sync + Send,
+        <B as Backend>::Error: 'static,
+    {
         terminal::enable_raw_mode()?;
         crossterm::execute!(io::stdout(), EnterAlternateScreen, EnableMouseCapture)?;
 
@@ -34,7 +38,11 @@ impl<B: Backend> Tui<B> {
         Ok(())
     }
 
-    pub fn draw(&mut self, app: &mut App) -> Result<()> {
+    pub fn draw(&mut self, app: &mut App) -> Result<()>
+    where
+        <B as Backend>::Error: Sync + Send,
+        <B as Backend>::Error: 'static,
+    {
         self.terminal.draw(|frame| app.render(frame))?;
         Ok(())
     }
@@ -45,7 +53,11 @@ impl<B: Backend> Tui<B> {
         Ok(())
     }
 
-    pub fn exit(&mut self) -> Result<()> {
+    pub fn exit(&mut self) -> Result<()>
+    where
+        <B as Backend>::Error: Sync + Send,
+        <B as Backend>::Error: 'static,
+    {
         Self::reset()?;
         self.terminal.show_cursor()?;
         Ok(())
