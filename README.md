@@ -49,8 +49,12 @@ sudo dmitui
 - [x] System (type 1)
 - [x] Baseboard (type 2)
 - [x] Chassis (type 3) (Partially)
+- [x] Processor (type 4)
+- [x] Cache (type 7)
+- [x] System Slots (type 9) (Partially)
 - [x] Firmware Language Information (type 13)
 - [x] Physical Memory Array (type 16)
+- [x] Memory Device (type 17)
 - [x] Portable Battery (type 22)
 
 ## ⚖️ License
