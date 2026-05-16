@@ -132,28 +132,26 @@ impl DMI {
             let mut data = vec![0; header.length.saturating_sub(4) as usize];
             file.read_exact(&mut data)?;
 
-            // Read Strings
+            // Read strings. The string-set ends with an extra NUL after the
+            // last string's terminator, so for a structure with no strings the
+            // formatted area is followed by two NUL bytes.
             let mut text: Vec<String> = Vec::new();
-
-            let mut previous_read_zero: bool = false;
-            let mut previous_read_string: bool = false;
+            let mut saw_leading_zero = false;
 
             loop {
                 let mut string_buf = Vec::new();
-                if let Ok(number_of_bytes_read) = file.read_until(0, &mut string_buf) {
-                    if number_of_bytes_read == 1 {
-                        if previous_read_zero {
+                match file.read_until(0, &mut string_buf)? {
+                    0 => break,
+                    1 => {
+                        // Empty entry (just the terminator byte).
+                        if !text.is_empty() || saw_leading_zero {
                             break;
-                        } else {
-                            if previous_read_string {
-                                break;
-                            }
-                            previous_read_zero = true;
                         }
-                    } else {
+                        saw_leading_zero = true;
+                    }
+                    _ => {
                         string_buf.pop();
                         text.push(String::from_utf8_lossy(&string_buf).to_string());
-                        previous_read_string = true;
                     }
                 }
             }
