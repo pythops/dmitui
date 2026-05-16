@@ -254,68 +254,22 @@ impl DMI {
     }
 
     fn title_span(&self, header_section: FocusedSection) -> Span<'_> {
-        let is_focused = self.focused_section == header_section;
-        match header_section {
-            FocusedSection::Firmware => {
-                if is_focused {
-                    Span::styled(
-                        "  Firmware  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Firmware  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::System => {
-                if is_focused {
-                    Span::styled(
-                        "  System  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  System  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Baseboard => {
-                if is_focused {
-                    Span::styled(
-                        "  Baseboard  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Baseboard  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Chassis => {
-                if is_focused {
-                    Span::styled(
-                        "  Chassis  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Chassis  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Memory => {
-                if is_focused {
-                    Span::styled(
-                        "  Memory  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Memory  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Battery => {
-                if is_focused {
-                    Span::styled(
-                        "  Battery  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Battery  ").fg(Color::DarkGray)
-                }
-            }
+        let label = match header_section {
+            FocusedSection::Firmware => "  Firmware  ",
+            FocusedSection::System => "  System  ",
+            FocusedSection::Baseboard => "  Baseboard  ",
+            FocusedSection::Chassis => "  Chassis  ",
+            FocusedSection::Memory => "  Memory  ",
+            FocusedSection::Battery => "  Battery  ",
+        };
+
+        if self.focused_section == header_section {
+            Span::styled(
+                label,
+                Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
+            )
+        } else {
+            Span::from(label).fg(Color::DarkGray)
         }
     }
 
