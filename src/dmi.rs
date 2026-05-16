@@ -3,6 +3,7 @@ mod battery;
 mod chassis;
 mod firmware;
 mod memory;
+mod processor;
 mod system;
 
 use std::{
@@ -18,6 +19,7 @@ use crate::dmi::battery::Battery;
 use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
 use crate::dmi::memory::{Memory, MemoryDevice, PhysicalMemoryArray};
+use crate::dmi::processor::{Processor, Processors};
 use crate::dmi::system::System;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -35,6 +37,7 @@ pub struct DMI {
     system: Option<System>,
     baseboard: Option<Baseboard>,
     chassis: Option<Chassis>,
+    processors: Option<Processors>,
     memory: Option<Memory>,
     battery: Option<Battery>,
     pub focused_section: FocusedSection,
@@ -47,6 +50,7 @@ pub enum FocusedSection {
     System,
     Baseboard,
     Chassis,
+    Processor,
     Memory,
     Battery,
 }
@@ -65,6 +69,7 @@ impl From<[u8; 4]> for Header {
             1 => StructureType::System,
             2 => StructureType::Baseboard,
             3 => StructureType::Chassis,
+            4 => StructureType::Processor,
             13 => StructureType::FirmwareLanguage,
             16 => StructureType::PhysicalMemoryArray,
             17 => StructureType::MemoryDevice,
@@ -88,6 +93,7 @@ pub enum StructureType {
     System = 1,
     Baseboard = 2,
     Chassis = 3,
+    Processor = 4,
     FirmwareLanguage = 13,
     PhysicalMemoryArray = 16,
     MemoryDevice = 17,
@@ -104,6 +110,7 @@ impl DMI {
         let mut system: Option<System> = None;
         let mut baseboard: Option<Baseboard> = None;
         let mut chassis: Option<Chassis> = None;
+        let mut processor_list: Vec<Processor> = Vec::new();
         let mut physical_memory_array: Option<PhysicalMemoryArray> = None;
         let mut memory_devices: Vec<MemoryDevice> = Vec::new();
         let mut battery: Option<Battery> = None;
@@ -172,6 +179,9 @@ impl DMI {
                 StructureType::Chassis => {
                     chassis = Some(Chassis::from((data, text)));
                 }
+                StructureType::Processor => {
+                    processor_list.push(Processor::from((data, text)));
+                }
                 StructureType::FirmwareLanguage => {
                     let language_infos = firmware::LanguageInfos::from((data, text));
 
@@ -193,12 +203,14 @@ impl DMI {
         }
 
         let memory = physical_memory_array.map(|pma| Memory::new(pma, memory_devices));
+        let processors = Processors::new(processor_list);
 
         let focused_section = [
             (FocusedSection::Firmware, firmware.is_some()),
             (FocusedSection::System, system.is_some()),
             (FocusedSection::Baseboard, baseboard.is_some()),
             (FocusedSection::Chassis, chassis.is_some()),
+            (FocusedSection::Processor, processors.is_some()),
             (FocusedSection::Memory, memory.is_some()),
             (FocusedSection::Battery, battery.is_some()),
         ]
@@ -211,6 +223,7 @@ impl DMI {
             system,
             baseboard,
             chassis,
+            processors,
             memory,
             battery,
             focused_section,
@@ -218,7 +231,7 @@ impl DMI {
     }
 
     fn available_sections(&self) -> Vec<FocusedSection> {
-        let mut sections = Vec::with_capacity(6);
+        let mut sections = Vec::with_capacity(7);
         if self.firmware.is_some() {
             sections.push(FocusedSection::Firmware);
         }
@@ -230,6 +243,9 @@ impl DMI {
         }
         if self.chassis.is_some() {
             sections.push(FocusedSection::Chassis);
+        }
+        if self.processors.is_some() {
+            sections.push(FocusedSection::Processor);
         }
         if self.memory.is_some() {
             sections.push(FocusedSection::Memory);
@@ -253,13 +269,19 @@ impl DMI {
             KeyCode::BackTab => {
                 self.focused_section = sections[(idx + sections.len() - 1) % sections.len()];
             }
-            _ => {
-                if self.focused_section == FocusedSection::Memory
-                    && let Some(memory) = &mut self.memory
-                {
-                    memory.handle_key_events(key_event);
+            _ => match self.focused_section {
+                FocusedSection::Memory => {
+                    if let Some(memory) = &mut self.memory {
+                        memory.handle_key_events(key_event);
+                    }
                 }
-            }
+                FocusedSection::Processor => {
+                    if let Some(processors) = &mut self.processors {
+                        processors.handle_key_events(key_event);
+                    }
+                }
+                _ => {}
+            },
         }
     }
 
@@ -269,6 +291,7 @@ impl DMI {
             FocusedSection::System => "  System  ",
             FocusedSection::Baseboard => "  Baseboard  ",
             FocusedSection::Chassis => "  Chassis  ",
+            FocusedSection::Processor => "  Processor  ",
             FocusedSection::Memory => "  Memory  ",
             FocusedSection::Battery => "  Battery  ",
         };
@@ -313,13 +336,18 @@ impl DMI {
         );
 
         // Help banner
-        let help_text = if self.focused_section == FocusedSection::Memory
-            && self
+        let inner_nav = match self.focused_section {
+            FocusedSection::Memory => self
                 .memory
                 .as_ref()
-                .is_some_and(|m| !m.memory_devices.is_empty())
-        {
-            "⇆ : Sections   ↑↓ : Devices"
+                .is_some_and(|m| !m.memory_devices.is_empty()),
+            FocusedSection::Processor => {
+                self.processors.as_ref().is_some_and(Processors::has_multiple)
+            }
+            _ => false,
+        };
+        let help_text = if inner_nav {
+            "⇆ : Sections   ↑↓ : Cycle"
         } else {
             "⇆ : Navigation"
         };
@@ -346,6 +374,11 @@ impl DMI {
             FocusedSection::Chassis => {
                 if let Some(chassis) = &self.chassis {
                     chassis.render(frame, section_block);
+                }
+            }
+            FocusedSection::Processor => {
+                if let Some(processors) = &mut self.processors {
+                    processors.render(frame, section_block);
                 }
             }
             FocusedSection::Memory => {
