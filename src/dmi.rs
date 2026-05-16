@@ -17,7 +17,7 @@ use crate::dmi::baseboard::Baseboard;
 use crate::dmi::battery::Battery;
 use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
-use crate::dmi::memory::{Memory, PhysicalMemoryArray};
+use crate::dmi::memory::{Memory, MemoryDevice, PhysicalMemoryArray};
 use crate::dmi::system::System;
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -67,6 +67,7 @@ impl From<[u8; 4]> for Header {
             3 => StructureType::Chassis,
             13 => StructureType::FirmwareLanguage,
             16 => StructureType::PhysicalMemoryArray,
+            17 => StructureType::MemoryDevice,
             22 => StructureType::Battery,
             127 => StructureType::End,
             _ => StructureType::Other,
@@ -89,6 +90,7 @@ pub enum StructureType {
     Chassis = 3,
     FirmwareLanguage = 13,
     PhysicalMemoryArray = 16,
+    MemoryDevice = 17,
     Battery = 22,
     End = 127,
     Other = 255,
@@ -102,7 +104,8 @@ impl DMI {
         let mut system: Option<System> = None;
         let mut baseboard: Option<Baseboard> = None;
         let mut chassis: Option<Chassis> = None;
-        let mut memory: Option<Memory> = None;
+        let mut physical_memory_array: Option<PhysicalMemoryArray> = None;
+        let mut memory_devices: Vec<MemoryDevice> = Vec::new();
         let mut battery: Option<Battery> = None;
 
         let dmi_file_path = Path::new("/sys/firmware/dmi/tables/DMI");
@@ -177,9 +180,10 @@ impl DMI {
                     }
                 }
                 StructureType::PhysicalMemoryArray => {
-                    memory = Some(Memory {
-                        physical_memory_array: PhysicalMemoryArray::from(data.as_slice()),
-                    });
+                    physical_memory_array = Some(PhysicalMemoryArray::from(data.as_slice()));
+                }
+                StructureType::MemoryDevice => {
+                    memory_devices.push(MemoryDevice::from((data, text)));
                 }
                 StructureType::Battery => {
                     battery = Some(Battery::from((data, text)));
@@ -187,6 +191,8 @@ impl DMI {
                 _ => {}
             }
         }
+
+        let memory = physical_memory_array.map(|pma| Memory::new(pma, memory_devices));
 
         let focused_section = [
             (FocusedSection::Firmware, firmware.is_some()),
@@ -247,7 +253,13 @@ impl DMI {
             KeyCode::BackTab => {
                 self.focused_section = sections[(idx + sections.len() - 1) % sections.len()];
             }
-            _ => {}
+            _ => {
+                if self.focused_section == FocusedSection::Memory
+                    && let Some(memory) = &mut self.memory
+                {
+                    memory.handle_key_events(key_event);
+                }
+            }
         }
     }
 
@@ -301,7 +313,17 @@ impl DMI {
         );
 
         // Help banner
-        let message = Line::from("⇆ : Navigation").centered().cyan();
+        let help_text = if self.focused_section == FocusedSection::Memory
+            && self
+                .memory
+                .as_ref()
+                .is_some_and(|m| !m.memory_devices.is_empty())
+        {
+            "⇆ : Sections   ↑↓ : Devices"
+        } else {
+            "⇆ : Navigation"
+        };
+        let message = Line::from(help_text).centered().cyan();
 
         frame.render_widget(message, help_block);
 
