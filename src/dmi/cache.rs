@@ -17,7 +17,10 @@ impl Cache {
         };
         let installed_size = CacheSize::from_fields(installed_size_field, installed_size_2);
 
-        let cache_type = data.get(13).copied().map_or(CacheType::Unknown, CacheType::from);
+        let cache_type = data
+            .get(13)
+            .copied()
+            .map_or(CacheType::Unknown, CacheType::from);
 
         Self {
             handle,

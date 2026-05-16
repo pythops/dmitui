@@ -366,9 +366,10 @@ impl DMI {
                 .memory
                 .as_ref()
                 .is_some_and(|m| !m.memory_devices.is_empty()),
-            FocusedSection::Processor => {
-                self.processors.as_ref().is_some_and(Processors::has_multiple)
-            }
+            FocusedSection::Processor => self
+                .processors
+                .as_ref()
+                .is_some_and(Processors::has_multiple),
             FocusedSection::Slots => self.slots.as_ref().is_some_and(Slots::has_multiple),
             _ => false,
         };

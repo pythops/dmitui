@@ -402,11 +402,7 @@ impl From<(Vec<u8>, Vec<String>)> for MemoryDevice {
             if v == 0 { None } else { Some(v) }
         };
 
-        let rank = data
-            .get(23)
-            .copied()
-            .map(|b| b & 0x0F)
-            .filter(|r| *r != 0);
+        let rank = data.get(23).copied().map(|b| b & 0x0F).filter(|r| *r != 0);
 
         let configured_speed = data
             .get(28..30)
@@ -426,22 +422,22 @@ impl From<(Vec<u8>, Vec<String>)> for MemoryDevice {
             .map(MemoryTechnology::from)
             .unwrap_or(MemoryTechnology::Unknown);
 
-        let manufacturer = data.get(19).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
-        let serial_number = data.get(20).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
-        let asset_tag = data.get(21).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
-        let part_number = data.get(22).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
+        let manufacturer = data
+            .get(19)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
+        let serial_number = data
+            .get(20)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
+        let asset_tag = data
+            .get(21)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
+        let part_number = data
+            .get(22)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
 
         Self {
             device_locator: string_ref(data[12], &text),
@@ -498,22 +494,13 @@ impl MemoryDevice {
                 Cell::from("Form Factor").bold(),
                 Cell::from(self.form_factor.to_string()),
             ]),
-            Row::new(vec![
-                Cell::from("Rank").bold(),
-                Cell::from(rank_text),
-            ]),
-            Row::new(vec![
-                Cell::from("Speed").bold(),
-                Cell::from(speed_text),
-            ]),
+            Row::new(vec![Cell::from("Rank").bold(), Cell::from(rank_text)]),
+            Row::new(vec![Cell::from("Speed").bold(), Cell::from(speed_text)]),
             Row::new(vec![
                 Cell::from("Configured Speed").bold(),
                 Cell::from(configured_speed_text),
             ]),
-            Row::new(vec![
-                Cell::from("Voltage").bold(),
-                Cell::from(voltage_text),
-            ]),
+            Row::new(vec![Cell::from("Voltage").bold(), Cell::from(voltage_text)]),
             Row::new(vec![
                 Cell::from("Bank Locator").bold(),
                 Cell::from(self.bank_locator.clone()),

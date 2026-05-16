@@ -149,18 +149,18 @@ impl From<(Vec<u8>, Vec<String>)> for Processor {
         let core_enabled = read_count(data.get(32).copied(), data.get(40..42));
         let thread_count = read_count(data.get(33).copied(), data.get(42..44));
 
-        let serial_number = data.get(28).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
-        let asset_tag = data.get(29).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
-        let part_number = data.get(30).copied().map_or_else(
-            || "Not Specified".to_string(),
-            |b| string_ref(b, &text),
-        );
+        let serial_number = data
+            .get(28)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
+        let asset_tag = data
+            .get(29)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
+        let part_number = data
+            .get(30)
+            .copied()
+            .map_or_else(|| "Not Specified".to_string(), |b| string_ref(b, &text));
 
         let l1_cache = cache_handle(&data, 22);
         let l2_cache = cache_handle(&data, 24);
@@ -674,86 +674,86 @@ fn family_name(family: u16, manufacturer: &str) -> String {
 // Upgrade array transcribed from dmidecode 3.7+ (dmi_processor_upgrade in dmidecode.c).
 // Spec reference: SMBIOS DSP0134 §7.5.5. Indexed by code - 0x01.
 const UPGRADE_NAMES: &[&str] = &[
-    "Other",                 // 0x01
-    "Unknown",               // 0x02
-    "Daughter Board",        // 0x03
-    "ZIF Socket",            // 0x04
-    "Replaceable Piggy Back",// 0x05
-    "None",                  // 0x06
-    "LIF Socket",            // 0x07
-    "Slot 1",                // 0x08
-    "Slot 2",                // 0x09
-    "370-pin Socket",        // 0x0A
-    "Slot A",                // 0x0B
-    "Slot M",                // 0x0C
-    "Socket 423",            // 0x0D
-    "Socket A (Socket 462)", // 0x0E
-    "Socket 478",            // 0x0F
-    "Socket 754",            // 0x10
-    "Socket 940",            // 0x11
-    "Socket 939",            // 0x12
-    "Socket mPGA604",        // 0x13
-    "Socket LGA771",         // 0x14
-    "Socket LGA775",         // 0x15
-    "Socket S1",             // 0x16
-    "Socket AM2",            // 0x17
-    "Socket F (1207)",       // 0x18
-    "Socket LGA1366",        // 0x19
-    "Socket G34",            // 0x1A
-    "Socket AM3",            // 0x1B
-    "Socket C32",            // 0x1C
-    "Socket LGA1156",        // 0x1D
-    "Socket LGA1567",        // 0x1E
-    "Socket PGA988A",        // 0x1F
-    "Socket BGA1288",        // 0x20
-    "Socket rPGA988B",       // 0x21
-    "Socket BGA1023",        // 0x22
-    "Socket BGA1224",        // 0x23
-    "Socket BGA1155",        // 0x24
-    "Socket LGA1356",        // 0x25
-    "Socket LGA2011",        // 0x26
-    "Socket FS1",            // 0x27
-    "Socket FS2",            // 0x28
-    "Socket FM1",            // 0x29
-    "Socket FM2",            // 0x2A
-    "Socket LGA2011-3",      // 0x2B
-    "Socket LGA1356-3",      // 0x2C
-    "Socket LGA1150",        // 0x2D
-    "Socket BGA1168",        // 0x2E
-    "Socket BGA1234",        // 0x2F
-    "Socket BGA1364",        // 0x30
-    "Socket AM4",            // 0x31
-    "Socket LGA1151",        // 0x32
-    "Socket BGA1356",        // 0x33
-    "Socket BGA1440",        // 0x34
-    "Socket BGA1515",        // 0x35
-    "Socket LGA3647-1",      // 0x36
-    "Socket SP3",            // 0x37
-    "Socket SP3r2",          // 0x38
-    "Socket LGA2066",        // 0x39
-    "Socket BGA1392",        // 0x3A
-    "Socket BGA1510",        // 0x3B
-    "Socket BGA1528",        // 0x3C
-    "Socket LGA4189",        // 0x3D
-    "Socket LGA1200",        // 0x3E
-    "Socket LGA4677",        // 0x3F
-    "Socket LGA1700",        // 0x40
-    "Socket BGA1744",        // 0x41
-    "Socket BGA1781",        // 0x42
-    "Socket BGA1211",        // 0x43
-    "Socket BGA2422",        // 0x44
-    "Socket LGA1211",        // 0x45
-    "Socket LGA2422",        // 0x46
-    "Socket LGA5773",        // 0x47
-    "Socket BGA5773",        // 0x48
-    "Socket AM5",            // 0x49
-    "Socket SP5",            // 0x4A
-    "Socket SP6",            // 0x4B
-    "Socket BGA883",         // 0x4C
-    "Socket BGA1190",        // 0x4D
-    "Socket BGA4129",        // 0x4E
-    "Socket LGA4710",        // 0x4F
-    "Socket LGA7529",        // 0x50
+    "Other",                  // 0x01
+    "Unknown",                // 0x02
+    "Daughter Board",         // 0x03
+    "ZIF Socket",             // 0x04
+    "Replaceable Piggy Back", // 0x05
+    "None",                   // 0x06
+    "LIF Socket",             // 0x07
+    "Slot 1",                 // 0x08
+    "Slot 2",                 // 0x09
+    "370-pin Socket",         // 0x0A
+    "Slot A",                 // 0x0B
+    "Slot M",                 // 0x0C
+    "Socket 423",             // 0x0D
+    "Socket A (Socket 462)",  // 0x0E
+    "Socket 478",             // 0x0F
+    "Socket 754",             // 0x10
+    "Socket 940",             // 0x11
+    "Socket 939",             // 0x12
+    "Socket mPGA604",         // 0x13
+    "Socket LGA771",          // 0x14
+    "Socket LGA775",          // 0x15
+    "Socket S1",              // 0x16
+    "Socket AM2",             // 0x17
+    "Socket F (1207)",        // 0x18
+    "Socket LGA1366",         // 0x19
+    "Socket G34",             // 0x1A
+    "Socket AM3",             // 0x1B
+    "Socket C32",             // 0x1C
+    "Socket LGA1156",         // 0x1D
+    "Socket LGA1567",         // 0x1E
+    "Socket PGA988A",         // 0x1F
+    "Socket BGA1288",         // 0x20
+    "Socket rPGA988B",        // 0x21
+    "Socket BGA1023",         // 0x22
+    "Socket BGA1224",         // 0x23
+    "Socket BGA1155",         // 0x24
+    "Socket LGA1356",         // 0x25
+    "Socket LGA2011",         // 0x26
+    "Socket FS1",             // 0x27
+    "Socket FS2",             // 0x28
+    "Socket FM1",             // 0x29
+    "Socket FM2",             // 0x2A
+    "Socket LGA2011-3",       // 0x2B
+    "Socket LGA1356-3",       // 0x2C
+    "Socket LGA1150",         // 0x2D
+    "Socket BGA1168",         // 0x2E
+    "Socket BGA1234",         // 0x2F
+    "Socket BGA1364",         // 0x30
+    "Socket AM4",             // 0x31
+    "Socket LGA1151",         // 0x32
+    "Socket BGA1356",         // 0x33
+    "Socket BGA1440",         // 0x34
+    "Socket BGA1515",         // 0x35
+    "Socket LGA3647-1",       // 0x36
+    "Socket SP3",             // 0x37
+    "Socket SP3r2",           // 0x38
+    "Socket LGA2066",         // 0x39
+    "Socket BGA1392",         // 0x3A
+    "Socket BGA1510",         // 0x3B
+    "Socket BGA1528",         // 0x3C
+    "Socket LGA4189",         // 0x3D
+    "Socket LGA1200",         // 0x3E
+    "Socket LGA4677",         // 0x3F
+    "Socket LGA1700",         // 0x40
+    "Socket BGA1744",         // 0x41
+    "Socket BGA1781",         // 0x42
+    "Socket BGA1211",         // 0x43
+    "Socket BGA2422",         // 0x44
+    "Socket LGA1211",         // 0x45
+    "Socket LGA2422",         // 0x46
+    "Socket LGA5773",         // 0x47
+    "Socket BGA5773",         // 0x48
+    "Socket AM5",             // 0x49
+    "Socket SP5",             // 0x4A
+    "Socket SP6",             // 0x4B
+    "Socket BGA883",          // 0x4C
+    "Socket BGA1190",         // 0x4D
+    "Socket BGA4129",         // 0x4E
+    "Socket LGA4710",         // 0x4F
+    "Socket LGA7529",         // 0x50
 ];
 
 fn upgrade_name(upgrade: u8) -> String {
