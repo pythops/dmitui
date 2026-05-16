@@ -31,17 +31,17 @@ use ratatui::{
 
 #[derive(Debug)]
 pub struct DMI {
-    firmware: Firmware,
-    system: System,
-    baseboard: Baseboard,
-    chassis: Chassis,
-    memory: Memory,
+    firmware: Option<Firmware>,
+    system: Option<System>,
+    baseboard: Option<Baseboard>,
+    chassis: Option<Chassis>,
+    memory: Option<Memory>,
     battery: Option<Battery>,
     pub focused_section: FocusedSection,
 }
 
 #[non_exhaustive]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FocusedSection {
     Firmware,
     System,
@@ -109,13 +109,10 @@ impl DMI {
 
         match dmi_file_path.try_exists() {
             Ok(true) => {}
-            Ok(false) | Err(_) => {
-                eprintln!("No SMBIOS found");
-                std::process::exit(1);
-            }
+            Ok(false) | Err(_) => bail!("No SMBIOS found"),
         }
 
-        let mem_file = File::open("/sys/firmware/dmi/tables/DMI")?;
+        let mem_file = File::open(dmi_file_path)?;
         let mut file = BufReader::new(mem_file);
 
         loop {
@@ -193,35 +190,65 @@ impl DMI {
             }
         }
 
+        let focused_section = [
+            (FocusedSection::Firmware, firmware.is_some()),
+            (FocusedSection::System, system.is_some()),
+            (FocusedSection::Baseboard, baseboard.is_some()),
+            (FocusedSection::Chassis, chassis.is_some()),
+            (FocusedSection::Memory, memory.is_some()),
+            (FocusedSection::Battery, battery.is_some()),
+        ]
+        .into_iter()
+        .find_map(|(s, present)| present.then_some(s))
+        .ok_or_else(|| anyhow::anyhow!("No supported DMI structures found"))?;
+
         Ok(Self {
-            firmware: firmware.unwrap(),
-            system: system.unwrap(),
-            baseboard: baseboard.unwrap(),
-            chassis: chassis.unwrap(),
-            memory: memory.unwrap(),
+            firmware,
+            system,
+            baseboard,
+            chassis,
+            memory,
             battery,
-            focused_section: FocusedSection::Firmware,
+            focused_section,
         })
     }
 
+    fn available_sections(&self) -> Vec<FocusedSection> {
+        let mut sections = Vec::with_capacity(6);
+        if self.firmware.is_some() {
+            sections.push(FocusedSection::Firmware);
+        }
+        if self.system.is_some() {
+            sections.push(FocusedSection::System);
+        }
+        if self.baseboard.is_some() {
+            sections.push(FocusedSection::Baseboard);
+        }
+        if self.chassis.is_some() {
+            sections.push(FocusedSection::Chassis);
+        }
+        if self.memory.is_some() {
+            sections.push(FocusedSection::Memory);
+        }
+        if self.battery.is_some() {
+            sections.push(FocusedSection::Battery);
+        }
+        sections
+    }
+
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+        let sections = self.available_sections();
+        let Some(idx) = sections.iter().position(|s| *s == self.focused_section) else {
+            return;
+        };
+
         match key_event.code {
-            KeyCode::Tab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::System,
-                FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
-                FocusedSection::Baseboard => self.focused_section = FocusedSection::Chassis,
-                FocusedSection::Chassis => self.focused_section = FocusedSection::Memory,
-                FocusedSection::Memory => self.focused_section = FocusedSection::Battery,
-                FocusedSection::Battery => self.focused_section = FocusedSection::Firmware,
-            },
-            KeyCode::BackTab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::Battery,
-                FocusedSection::System => self.focused_section = FocusedSection::Firmware,
-                FocusedSection::Baseboard => self.focused_section = FocusedSection::System,
-                FocusedSection::Chassis => self.focused_section = FocusedSection::Baseboard,
-                FocusedSection::Memory => self.focused_section = FocusedSection::Chassis,
-                FocusedSection::Battery => self.focused_section = FocusedSection::Memory,
-            },
+            KeyCode::Tab => {
+                self.focused_section = sections[(idx + 1) % sections.len()];
+            }
+            KeyCode::BackTab => {
+                self.focused_section = sections[(idx + sections.len() - 1) % sections.len()];
+            }
             _ => {}
         }
     }
@@ -303,16 +330,15 @@ impl DMI {
             (chunks[0], chunks[1])
         };
 
+        let title_spans: Vec<Span<'_>> = self
+            .available_sections()
+            .into_iter()
+            .map(|s| self.title_span(s))
+            .collect();
+
         frame.render_widget(
             Block::default()
-                .title(Line::from(vec![
-                    self.title_span(FocusedSection::Firmware),
-                    self.title_span(FocusedSection::System),
-                    self.title_span(FocusedSection::Baseboard),
-                    self.title_span(FocusedSection::Chassis),
-                    self.title_span(FocusedSection::Memory),
-                    self.title_span(FocusedSection::Battery),
-                ]))
+                .title(Line::from(title_spans))
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
                 .borders(Borders::ALL)
@@ -329,19 +355,29 @@ impl DMI {
 
         match self.focused_section {
             FocusedSection::Firmware => {
-                self.firmware.render(frame, section_block);
+                if let Some(firmware) = &self.firmware {
+                    firmware.render(frame, section_block);
+                }
             }
             FocusedSection::System => {
-                self.system.render(frame, section_block);
+                if let Some(system) = &self.system {
+                    system.render(frame, section_block);
+                }
             }
             FocusedSection::Baseboard => {
-                self.baseboard.render(frame, section_block);
+                if let Some(baseboard) = &self.baseboard {
+                    baseboard.render(frame, section_block);
+                }
             }
             FocusedSection::Chassis => {
-                self.chassis.render(frame, section_block);
+                if let Some(chassis) = &self.chassis {
+                    chassis.render(frame, section_block);
+                }
             }
             FocusedSection::Memory => {
-                self.memory.render(frame, section_block);
+                if let Some(memory) = &mut self.memory {
+                    memory.render(frame, section_block);
+                }
             }
             FocusedSection::Battery => {
                 if let Some(battery) = &self.battery {
