@@ -1,8 +1,11 @@
 mod baseboard;
 mod battery;
+mod cache;
 mod chassis;
 mod firmware;
 mod memory;
+mod processor;
+mod slot;
 mod system;
 
 use std::{
@@ -15,39 +18,46 @@ use anyhow::{Result, bail};
 
 use crate::dmi::baseboard::Baseboard;
 use crate::dmi::battery::Battery;
+use crate::dmi::cache::Cache;
 use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
-use crate::dmi::memory::{Memory, PhysicalMemoryArray};
+use crate::dmi::memory::{Memory, MemoryDevice, PhysicalMemoryArray};
+use crate::dmi::processor::{Processor, Processors};
+use crate::dmi::slot::{Slot, Slots};
 use crate::dmi::system::System;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Padding},
 };
 
 #[derive(Debug)]
 pub struct DMI {
-    firmware: Firmware,
-    system: System,
-    baseboard: Baseboard,
-    chassis: Chassis,
-    memory: Memory,
+    firmware: Option<Firmware>,
+    system: Option<System>,
+    baseboard: Option<Baseboard>,
+    chassis: Option<Chassis>,
+    processors: Option<Processors>,
+    memory: Option<Memory>,
+    slots: Option<Slots>,
     battery: Option<Battery>,
     pub focused_section: FocusedSection,
 }
 
 #[non_exhaustive]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum FocusedSection {
     Firmware,
     System,
     Baseboard,
     Chassis,
+    Processor,
     Memory,
+    Slots,
     Battery,
 }
 
@@ -65,8 +75,12 @@ impl From<[u8; 4]> for Header {
             1 => StructureType::System,
             2 => StructureType::Baseboard,
             3 => StructureType::Chassis,
+            4 => StructureType::Processor,
+            7 => StructureType::Cache,
+            9 => StructureType::SystemSlots,
             13 => StructureType::FirmwareLanguage,
             16 => StructureType::PhysicalMemoryArray,
+            17 => StructureType::MemoryDevice,
             22 => StructureType::Battery,
             127 => StructureType::End,
             _ => StructureType::Other,
@@ -75,7 +89,7 @@ impl From<[u8; 4]> for Header {
         Self {
             structure_type,
             length: value[1],
-            handle: u16::from_be_bytes([value[2], value[3]]),
+            handle: u16::from_le_bytes([value[2], value[3]]),
         }
     }
 }
@@ -87,8 +101,12 @@ pub enum StructureType {
     System = 1,
     Baseboard = 2,
     Chassis = 3,
+    Processor = 4,
+    Cache = 7,
+    SystemSlots = 9,
     FirmwareLanguage = 13,
     PhysicalMemoryArray = 16,
+    MemoryDevice = 17,
     Battery = 22,
     End = 127,
     Other = 255,
@@ -102,20 +120,21 @@ impl DMI {
         let mut system: Option<System> = None;
         let mut baseboard: Option<Baseboard> = None;
         let mut chassis: Option<Chassis> = None;
-        let mut memory: Option<Memory> = None;
+        let mut processor_list: Vec<Processor> = Vec::new();
+        let mut caches: Vec<Cache> = Vec::new();
+        let mut physical_memory_array: Option<PhysicalMemoryArray> = None;
+        let mut memory_devices: Vec<MemoryDevice> = Vec::new();
+        let mut slot_list: Vec<Slot> = Vec::new();
         let mut battery: Option<Battery> = None;
 
         let dmi_file_path = Path::new("/sys/firmware/dmi/tables/DMI");
 
         match dmi_file_path.try_exists() {
             Ok(true) => {}
-            Ok(false) | Err(_) => {
-                eprintln!("No SMBIOS found");
-                std::process::exit(1);
-            }
+            Ok(false) | Err(_) => bail!("No SMBIOS found"),
         }
 
-        let mem_file = File::open("/sys/firmware/dmi/tables/DMI")?;
+        let mem_file = File::open(dmi_file_path)?;
         let mut file = BufReader::new(mem_file);
 
         loop {
@@ -135,28 +154,26 @@ impl DMI {
             let mut data = vec![0; header.length.saturating_sub(4) as usize];
             file.read_exact(&mut data)?;
 
-            // Read Strings
+            // Read strings. The string-set ends with an extra NUL after the
+            // last string's terminator, so for a structure with no strings the
+            // formatted area is followed by two NUL bytes.
             let mut text: Vec<String> = Vec::new();
-
-            let mut previous_read_zero: bool = false;
-            let mut previous_read_string: bool = false;
+            let mut saw_leading_zero = false;
 
             loop {
                 let mut string_buf = Vec::new();
-                if let Ok(number_of_bytes_read) = file.read_until(0, &mut string_buf) {
-                    if number_of_bytes_read == 1 {
-                        if previous_read_zero {
+                match file.read_until(0, &mut string_buf)? {
+                    0 => break,
+                    1 => {
+                        // Empty entry (just the terminator byte).
+                        if !text.is_empty() || saw_leading_zero {
                             break;
-                        } else {
-                            if previous_read_string {
-                                break;
-                            }
-                            previous_read_zero = true;
                         }
-                    } else {
+                        saw_leading_zero = true;
+                    }
+                    _ => {
                         string_buf.pop();
                         text.push(String::from_utf8_lossy(&string_buf).to_string());
-                        previous_read_string = true;
                     }
                 }
             }
@@ -174,6 +191,15 @@ impl DMI {
                 StructureType::Chassis => {
                     chassis = Some(Chassis::from((data, text)));
                 }
+                StructureType::Processor => {
+                    processor_list.push(Processor::from((data, text)));
+                }
+                StructureType::Cache => {
+                    caches.push(Cache::parse(header.handle, data));
+                }
+                StructureType::SystemSlots => {
+                    slot_list.push(Slot::from((data, text)));
+                }
                 StructureType::FirmwareLanguage => {
                     let language_infos = firmware::LanguageInfos::from((data, text));
 
@@ -182,9 +208,10 @@ impl DMI {
                     }
                 }
                 StructureType::PhysicalMemoryArray => {
-                    memory = Some(Memory {
-                        physical_memory_array: PhysicalMemoryArray::from(data.as_slice()),
-                    });
+                    physical_memory_array = Some(PhysicalMemoryArray::from(data.as_slice()));
+                }
+                StructureType::MemoryDevice => {
+                    memory_devices.push(MemoryDevice::from((data, text)));
                 }
                 StructureType::Battery => {
                     battery = Some(Battery::from((data, text)));
@@ -193,102 +220,116 @@ impl DMI {
             }
         }
 
+        let memory = physical_memory_array.map(|pma| Memory::new(pma, memory_devices));
+        let processors = Processors::new(processor_list, caches);
+        let slots = Slots::new(slot_list);
+
+        let focused_section = [
+            (FocusedSection::Firmware, firmware.is_some()),
+            (FocusedSection::System, system.is_some()),
+            (FocusedSection::Baseboard, baseboard.is_some()),
+            (FocusedSection::Chassis, chassis.is_some()),
+            (FocusedSection::Processor, processors.is_some()),
+            (FocusedSection::Memory, memory.is_some()),
+            (FocusedSection::Slots, slots.is_some()),
+            (FocusedSection::Battery, battery.is_some()),
+        ]
+        .into_iter()
+        .find_map(|(s, present)| present.then_some(s))
+        .ok_or_else(|| anyhow::anyhow!("No supported DMI structures found"))?;
+
         Ok(Self {
-            firmware: firmware.unwrap(),
-            system: system.unwrap(),
-            baseboard: baseboard.unwrap(),
-            chassis: chassis.unwrap(),
-            memory: memory.unwrap(),
+            firmware,
+            system,
+            baseboard,
+            chassis,
+            processors,
+            memory,
+            slots,
             battery,
-            focused_section: FocusedSection::Firmware,
+            focused_section,
         })
     }
 
+    fn available_sections(&self) -> Vec<FocusedSection> {
+        let mut sections = Vec::with_capacity(8);
+        if self.firmware.is_some() {
+            sections.push(FocusedSection::Firmware);
+        }
+        if self.system.is_some() {
+            sections.push(FocusedSection::System);
+        }
+        if self.baseboard.is_some() {
+            sections.push(FocusedSection::Baseboard);
+        }
+        if self.chassis.is_some() {
+            sections.push(FocusedSection::Chassis);
+        }
+        if self.processors.is_some() {
+            sections.push(FocusedSection::Processor);
+        }
+        if self.memory.is_some() {
+            sections.push(FocusedSection::Memory);
+        }
+        if self.slots.is_some() {
+            sections.push(FocusedSection::Slots);
+        }
+        if self.battery.is_some() {
+            sections.push(FocusedSection::Battery);
+        }
+        sections
+    }
+
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
+        let sections = self.available_sections();
+        let Some(idx) = sections.iter().position(|s| *s == self.focused_section) else {
+            return;
+        };
+
         match key_event.code {
-            KeyCode::Tab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::System,
-                FocusedSection::System => self.focused_section = FocusedSection::Baseboard,
-                FocusedSection::Baseboard => self.focused_section = FocusedSection::Chassis,
-                FocusedSection::Chassis => self.focused_section = FocusedSection::Memory,
-                FocusedSection::Memory => self.focused_section = FocusedSection::Battery,
-                FocusedSection::Battery => self.focused_section = FocusedSection::Firmware,
+            KeyCode::Tab => {
+                self.focused_section = sections[(idx + 1) % sections.len()];
+            }
+            KeyCode::BackTab => {
+                self.focused_section = sections[(idx + sections.len() - 1) % sections.len()];
+            }
+            _ => match self.focused_section {
+                FocusedSection::Memory => {
+                    if let Some(memory) = &mut self.memory {
+                        memory.handle_key_events(key_event);
+                    }
+                }
+                FocusedSection::Processor => {
+                    if let Some(processors) = &mut self.processors {
+                        processors.handle_key_events(key_event);
+                    }
+                }
+                FocusedSection::Slots => {
+                    if let Some(slots) = &mut self.slots {
+                        slots.handle_key_events(key_event);
+                    }
+                }
+                _ => {}
             },
-            KeyCode::BackTab => match self.focused_section {
-                FocusedSection::Firmware => self.focused_section = FocusedSection::Battery,
-                FocusedSection::System => self.focused_section = FocusedSection::Firmware,
-                FocusedSection::Baseboard => self.focused_section = FocusedSection::System,
-                FocusedSection::Chassis => self.focused_section = FocusedSection::Baseboard,
-                FocusedSection::Memory => self.focused_section = FocusedSection::Chassis,
-                FocusedSection::Battery => self.focused_section = FocusedSection::Memory,
-            },
-            _ => {}
         }
     }
 
     fn title_span(&self, header_section: FocusedSection) -> Span<'_> {
-        let is_focused = self.focused_section == header_section;
-        match header_section {
-            FocusedSection::Firmware => {
-                if is_focused {
-                    Span::styled(
-                        "  Firmware  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Firmware  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::System => {
-                if is_focused {
-                    Span::styled(
-                        "  System  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  System  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Baseboard => {
-                if is_focused {
-                    Span::styled(
-                        "  Baseboard  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Baseboard  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Chassis => {
-                if is_focused {
-                    Span::styled(
-                        "  Chassis  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Chassis  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Memory => {
-                if is_focused {
-                    Span::styled(
-                        "  Memory  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Memory  ").fg(Color::DarkGray)
-                }
-            }
-            FocusedSection::Battery => {
-                if is_focused {
-                    Span::styled(
-                        "  Battery  ",
-                        Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-                    )
-                } else {
-                    Span::from("  Battery  ").fg(Color::DarkGray)
-                }
-            }
+        let label = match header_section {
+            FocusedSection::Firmware => "  Firmware  ",
+            FocusedSection::System => "  System  ",
+            FocusedSection::Baseboard => "  Baseboard  ",
+            FocusedSection::Chassis => "  Chassis  ",
+            FocusedSection::Processor => "  Processor  ",
+            FocusedSection::Memory => "  Memory  ",
+            FocusedSection::Slots => "  Slots  ",
+            FocusedSection::Battery => "  Battery  ",
+        };
+
+        if self.focused_section == header_section {
+            Span::styled(label, Style::new().bold().reversed())
+        } else {
+            Span::from(label).dim()
         }
     }
 
@@ -303,45 +344,79 @@ impl DMI {
             (chunks[0], chunks[1])
         };
 
+        let title_spans: Vec<Span<'_>> = self
+            .available_sections()
+            .into_iter()
+            .map(|s| self.title_span(s))
+            .collect();
+
         frame.render_widget(
             Block::default()
-                .title(Line::from(vec![
-                    self.title_span(FocusedSection::Firmware),
-                    self.title_span(FocusedSection::System),
-                    self.title_span(FocusedSection::Baseboard),
-                    self.title_span(FocusedSection::Chassis),
-                    self.title_span(FocusedSection::Memory),
-                    self.title_span(FocusedSection::Battery),
-                ]))
+                .title(Line::from(title_spans))
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .style(Style::default())
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_type(BorderType::Rounded),
             section_block,
         );
 
         // Help banner
-        let message = Line::from("⇆ : Navigation").centered().cyan();
+        let inner_nav = match self.focused_section {
+            FocusedSection::Memory => self
+                .memory
+                .as_ref()
+                .is_some_and(|m| !m.memory_devices.is_empty()),
+            FocusedSection::Processor => self
+                .processors
+                .as_ref()
+                .is_some_and(Processors::has_multiple),
+            FocusedSection::Slots => self.slots.as_ref().is_some_and(Slots::has_multiple),
+            _ => false,
+        };
+        let help_text = if inner_nav {
+            "⇆ : Sections   ↑↓ : Cycle"
+        } else {
+            "⇆ : Navigation"
+        };
+        let message = Line::from(help_text).centered().dim();
 
         frame.render_widget(message, help_block);
 
         match self.focused_section {
             FocusedSection::Firmware => {
-                self.firmware.render(frame, section_block);
+                if let Some(firmware) = &self.firmware {
+                    firmware.render(frame, section_block);
+                }
             }
             FocusedSection::System => {
-                self.system.render(frame, section_block);
+                if let Some(system) = &self.system {
+                    system.render(frame, section_block);
+                }
             }
             FocusedSection::Baseboard => {
-                self.baseboard.render(frame, section_block);
+                if let Some(baseboard) = &self.baseboard {
+                    baseboard.render(frame, section_block);
+                }
             }
             FocusedSection::Chassis => {
-                self.chassis.render(frame, section_block);
+                if let Some(chassis) = &self.chassis {
+                    chassis.render(frame, section_block);
+                }
+            }
+            FocusedSection::Processor => {
+                if let Some(processors) = &mut self.processors {
+                    processors.render(frame, section_block);
+                }
             }
             FocusedSection::Memory => {
-                self.memory.render(frame, section_block);
+                if let Some(memory) = &mut self.memory {
+                    memory.render(frame, section_block);
+                }
+            }
+            FocusedSection::Slots => {
+                if let Some(slots) = &mut self.slots {
+                    slots.render(frame, section_block);
+                }
             }
             FocusedSection::Battery => {
                 if let Some(battery) = &self.battery {
