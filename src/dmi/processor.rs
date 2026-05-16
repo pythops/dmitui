@@ -6,6 +6,8 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Cell, List, ListItem, ListState, Padding, Row, Table},
 };
 
+use crate::dmi::cache::Cache;
+
 fn string_ref(idx: u8, text: &[String]) -> String {
     if idx == 0 {
         return "Not Specified".to_string();
@@ -18,15 +20,20 @@ fn string_ref(idx: u8, text: &[String]) -> String {
 #[derive(Debug)]
 pub struct Processors {
     list: Vec<Processor>,
+    caches: Vec<Cache>,
     selected: usize,
 }
 
 impl Processors {
-    pub fn new(list: Vec<Processor>) -> Option<Self> {
+    pub fn new(list: Vec<Processor>, caches: Vec<Cache>) -> Option<Self> {
         if list.is_empty() {
             None
         } else {
-            Some(Self { list, selected: 0 })
+            Some(Self {
+                list,
+                caches,
+                selected: 0,
+            })
         }
     }
 
@@ -51,7 +58,7 @@ impl Processors {
 
     pub fn render(&mut self, frame: &mut Frame, block: Rect) {
         if !self.has_multiple() {
-            self.list[0].render(frame, block);
+            self.list[0].render(frame, block, &self.caches);
             return;
         }
 
@@ -81,7 +88,7 @@ impl Processors {
         frame.render_stateful_widget(list, body[0], &mut state);
 
         if let Some(processor) = self.list.get(self.selected) {
-            processor.render(frame, body[1]);
+            processor.render(frame, body[1], &self.caches);
         }
     }
 }
@@ -98,6 +105,9 @@ pub struct Processor {
     current_speed: Option<u16>,
     status: ProcessorStatus,
     upgrade: u8,
+    l1_cache: Option<u16>,
+    l2_cache: Option<u16>,
+    l3_cache: Option<u16>,
     core_count: Option<u16>,
     core_enabled: Option<u16>,
     thread_count: Option<u16>,
@@ -143,6 +153,10 @@ impl From<(Vec<u8>, Vec<String>)> for Processor {
             |b| string_ref(b, &text),
         );
 
+        let l1_cache = cache_handle(&data, 22);
+        let l2_cache = cache_handle(&data, 24);
+        let l3_cache = cache_handle(&data, 26);
+
         Self {
             socket_designation: string_ref(data[0], &text),
             processor_type: ProcessorType::from(data[1]),
@@ -154,6 +168,9 @@ impl From<(Vec<u8>, Vec<String>)> for Processor {
             current_speed,
             status: ProcessorStatus::from(data[20]),
             upgrade: data[21],
+            l1_cache,
+            l2_cache,
+            l3_cache,
             core_count,
             core_enabled,
             thread_count,
@@ -162,6 +179,15 @@ impl From<(Vec<u8>, Vec<String>)> for Processor {
             part_number,
         }
     }
+}
+
+// Read a u16 cache handle at the given offset in the structure's data slice.
+// Returns None if the structure is too short or the handle is 0xFFFF
+// ("the device does not have any cache of this level").
+fn cache_handle(data: &[u8], offset: usize) -> Option<u16> {
+    let slice = data.get(offset..offset + 2)?;
+    let handle = u16::from_le_bytes(slice.try_into().ok()?);
+    (handle != 0xFFFF).then_some(handle)
 }
 
 fn read_count(legacy: Option<u8>, extended: Option<&[u8]>) -> Option<u16> {
@@ -175,7 +201,7 @@ fn read_count(legacy: Option<u8>, extended: Option<&[u8]>) -> Option<u16> {
 }
 
 impl Processor {
-    fn render(&self, frame: &mut Frame, block: Rect) {
+    fn render(&self, frame: &mut Frame, block: Rect, caches: &[Cache]) {
         let speed_cell = |v: Option<u16>| match v {
             Some(s) => format!("{s} MHz"),
             None => "Unknown".to_string(),
@@ -183,6 +209,13 @@ impl Processor {
         let count_cell = |v: Option<u16>| match v {
             Some(c) => c.to_string(),
             None => "Unknown".to_string(),
+        };
+        let cache_row = |label: &'static str, handle: Option<u16>| {
+            let summary = handle
+                .and_then(|h| caches.iter().find(|c| c.handle == h))
+                .map(Cache::summary)
+                .unwrap_or_else(|| "Not present".to_string());
+            Row::new(vec![Cell::from(label).bold(), Cell::from(summary)])
         };
 
         let rows = vec![
@@ -238,6 +271,9 @@ impl Processor {
                 Cell::from("Upgrade").bold(),
                 Cell::from(upgrade_name(self.upgrade)),
             ]),
+            cache_row("L1 Cache", self.l1_cache),
+            cache_row("L2 Cache", self.l2_cache),
+            cache_row("L3 Cache", self.l3_cache),
             Row::new(vec![
                 Cell::from("Part Number").bold(),
                 Cell::from(self.part_number.clone()),

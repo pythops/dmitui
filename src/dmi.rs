@@ -1,5 +1,6 @@
 mod baseboard;
 mod battery;
+mod cache;
 mod chassis;
 mod firmware;
 mod memory;
@@ -16,6 +17,7 @@ use anyhow::{Result, bail};
 
 use crate::dmi::baseboard::Baseboard;
 use crate::dmi::battery::Battery;
+use crate::dmi::cache::Cache;
 use crate::dmi::chassis::Chassis;
 use crate::dmi::firmware::Firmware;
 use crate::dmi::memory::{Memory, MemoryDevice, PhysicalMemoryArray};
@@ -70,6 +72,7 @@ impl From<[u8; 4]> for Header {
             2 => StructureType::Baseboard,
             3 => StructureType::Chassis,
             4 => StructureType::Processor,
+            7 => StructureType::Cache,
             13 => StructureType::FirmwareLanguage,
             16 => StructureType::PhysicalMemoryArray,
             17 => StructureType::MemoryDevice,
@@ -81,7 +84,7 @@ impl From<[u8; 4]> for Header {
         Self {
             structure_type,
             length: value[1],
-            handle: u16::from_be_bytes([value[2], value[3]]),
+            handle: u16::from_le_bytes([value[2], value[3]]),
         }
     }
 }
@@ -94,6 +97,7 @@ pub enum StructureType {
     Baseboard = 2,
     Chassis = 3,
     Processor = 4,
+    Cache = 7,
     FirmwareLanguage = 13,
     PhysicalMemoryArray = 16,
     MemoryDevice = 17,
@@ -111,6 +115,7 @@ impl DMI {
         let mut baseboard: Option<Baseboard> = None;
         let mut chassis: Option<Chassis> = None;
         let mut processor_list: Vec<Processor> = Vec::new();
+        let mut caches: Vec<Cache> = Vec::new();
         let mut physical_memory_array: Option<PhysicalMemoryArray> = None;
         let mut memory_devices: Vec<MemoryDevice> = Vec::new();
         let mut battery: Option<Battery> = None;
@@ -182,6 +187,9 @@ impl DMI {
                 StructureType::Processor => {
                     processor_list.push(Processor::from((data, text)));
                 }
+                StructureType::Cache => {
+                    caches.push(Cache::parse(header.handle, data));
+                }
                 StructureType::FirmwareLanguage => {
                     let language_infos = firmware::LanguageInfos::from((data, text));
 
@@ -203,7 +211,7 @@ impl DMI {
         }
 
         let memory = physical_memory_array.map(|pma| Memory::new(pma, memory_devices));
-        let processors = Processors::new(processor_list);
+        let processors = Processors::new(processor_list, caches);
 
         let focused_section = [
             (FocusedSection::Firmware, firmware.is_some()),
