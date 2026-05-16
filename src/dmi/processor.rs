@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     widgets::{Block, BorderType, Borders, Cell, List, ListItem, ListState, Padding, Row, Table},
 };
 
@@ -80,7 +80,7 @@ impl Processors {
                     .border_type(BorderType::Rounded)
                     .padding(Padding::horizontal(1)),
             )
-            .highlight_style(Style::default().bg(Color::Yellow).fg(Color::Black).bold())
+            .highlight_style(Style::new().bold().reversed())
             .highlight_symbol("");
 
         let mut state = ListState::default();

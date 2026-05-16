@@ -30,7 +30,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout},
-    style::{Color, Style, Stylize},
+    style::{Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Padding},
 };
@@ -327,12 +327,9 @@ impl DMI {
         };
 
         if self.focused_section == header_section {
-            Span::styled(
-                label,
-                Style::default().bg(Color::Yellow).fg(Color::Black).bold(),
-            )
+            Span::styled(label, Style::new().bold().reversed())
         } else {
-            Span::from(label).fg(Color::DarkGray)
+            Span::from(label).dim()
         }
     }
 
@@ -359,9 +356,7 @@ impl DMI {
                 .title_alignment(Alignment::Left)
                 .padding(Padding::top(1))
                 .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .style(Style::default())
-                .border_style(Style::default().fg(Color::Yellow)),
+                .border_type(BorderType::Rounded),
             section_block,
         );
 
@@ -382,7 +377,7 @@ impl DMI {
         } else {
             "⇆ : Navigation"
         };
-        let message = Line::from(help_text).centered().cyan();
+        let message = Line::from(help_text).centered().dim();
 
         frame.render_widget(message, help_block);
 
