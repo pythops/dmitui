@@ -69,7 +69,7 @@ impl Slots {
         let body = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Length(list_width), Constraint::Fill(1)])
-            .split(block.inner(Margin::new(2, 1)));
+            .split(block.inner(Margin::new(4, 2)));
 
         let items: Vec<ListItem<'_>> = self
             .list
@@ -82,7 +82,7 @@ impl Slots {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .padding(Padding::horizontal(1)),
+                    .padding(Padding::new(1, 1, 1, 0)),
             )
             .highlight_style(Style::new().bold().reversed())
             .highlight_symbol("");
@@ -195,7 +195,7 @@ impl Slot {
         }
 
         let widths = [Constraint::Length(22), Constraint::Fill(1)];
-        let table = Table::new(rows, widths).block(Block::new().padding(Padding::uniform(1)));
+        let table = Table::new(rows, widths).block(Block::new().padding(Padding::uniform(2)));
         frame.render_widget(table, block.inner(Margin::new(2, 0)));
     }
 }

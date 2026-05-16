@@ -67,8 +67,8 @@ impl Memory {
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Fill(1)])
-            .split(block.inner(Margin::new(2, 1)));
+            .constraints([Constraint::Length(1), Constraint::Fill(1)])
+            .split(block.inner(Margin::new(4, 2)));
 
         let count_label = match self.device_layout() {
             DeviceLayout::Soldered => "Chips: ",
@@ -113,7 +113,7 @@ impl Memory {
                 Block::default()
                     .borders(Borders::ALL)
                     .border_type(BorderType::Rounded)
-                    .padding(Padding::horizontal(1)),
+                    .padding(Padding::new(1, 1, 1, 0)),
             )
             .highlight_style(Style::new().bold().reversed())
             .highlight_symbol("");
@@ -537,7 +537,7 @@ impl MemoryDevice {
         ];
 
         let widths = [Constraint::Length(18), Constraint::Fill(1)];
-        let table = Table::new(rows, widths).block(Block::new().padding(Padding::uniform(1)));
+        let table = Table::new(rows, widths).block(Block::new().padding(Padding::uniform(2)));
         frame.render_widget(table, block.inner(Margin::new(2, 0)));
     }
 }
