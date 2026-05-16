@@ -26,6 +26,23 @@ impl Memory {
         }
     }
 
+    fn device_layout(&self) -> DeviceLayout {
+        let mut has_soldered = false;
+        let mut has_socketed = false;
+        for d in &self.memory_devices {
+            match d.form_factor.kind() {
+                FormFactorKind::Soldered => has_soldered = true,
+                FormFactorKind::Socketed => has_socketed = true,
+                FormFactorKind::Unknown => {}
+            }
+        }
+        match (has_soldered, has_socketed) {
+            (true, false) => DeviceLayout::Soldered,
+            (false, true) => DeviceLayout::Socketed,
+            _ => DeviceLayout::Mixed,
+        }
+    }
+
     pub fn handle_key_events(&mut self, key_event: KeyEvent) {
         if self.memory_devices.is_empty() {
             return;
@@ -53,11 +70,17 @@ impl Memory {
             .constraints([Constraint::Length(3), Constraint::Fill(1)])
             .split(block.inner(Margin::new(2, 1)));
 
+        let count_label = match self.device_layout() {
+            DeviceLayout::Soldered => "Chips: ",
+            DeviceLayout::Socketed => "Slots: ",
+            DeviceLayout::Mixed => "Devices: ",
+        };
+
         let summary = Line::from(vec![
             Span::from("Total Capacity: ").bold(),
             Span::from(self.physical_memory_array.max_capacity.clone()),
             Span::from("    "),
-            Span::from("Slots: ").bold(),
+            Span::from(count_label).bold(),
             Span::from(self.physical_memory_array.number_memory_devices.to_string()),
             Span::from("    "),
             Span::from("ECC: ").bold(),
@@ -65,9 +88,18 @@ impl Memory {
         ]);
         frame.render_widget(summary, chunks[0]);
 
+        let max_label = self
+            .memory_devices
+            .iter()
+            .map(|d| d.device_locator.chars().count())
+            .max()
+            .unwrap_or(0) as u16;
+        // 4 = 2 borders + 2 horizontal padding
+        let list_width = max_label.saturating_add(4).max(14);
+
         let body = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(22), Constraint::Fill(1)])
+            .constraints([Constraint::Length(list_width), Constraint::Fill(1)])
             .split(chunks[1]);
 
         let items: Vec<ListItem<'_>> = self
@@ -96,6 +128,20 @@ impl Memory {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+enum DeviceLayout {
+    Soldered,
+    Socketed,
+    Mixed,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum FormFactorKind {
+    Soldered,
+    Socketed,
+    Unknown,
+}
+
 #[derive(Debug)]
 pub struct PhysicalMemoryArray {
     location: Location,
@@ -110,21 +156,22 @@ impl From<&[u8]> for PhysicalMemoryArray {
     fn from(data: &[u8]) -> Self {
         let max_capacity = {
             let value = u32::from_le_bytes(data[3..7].try_into().unwrap());
-
-            if value == 0x80008000 {
-                format!("{}T", u64::from_le_bytes(data[11..19].try_into().unwrap()))
+            // Per SMBIOS spec, 0x80000000 in the DWORD field means the actual
+            // value is in the Extended Maximum Capacity QWORD (in bytes).
+            let kb: u64 = if value == 0x80000000 && data.len() >= 19 {
+                u64::from_le_bytes(data[11..19].try_into().unwrap()) / 1024
             } else {
-                match value {
-                    value if value <= 1024 => {
-                        format!("{value}K")
-                    }
-                    value if value <= 1024 * 1024 => {
-                        format!("{}M", value / 1024)
-                    }
-                    _ => {
-                        format!("{}G", value / 1024 / 1024)
-                    }
-                }
+                value as u64
+            };
+
+            if kb <= 1024 {
+                format!("{kb}K")
+            } else if kb <= 1024 * 1024 {
+                format!("{}M", kb / 1024)
+            } else if kb <= 1024 * 1024 * 1024 {
+                format!("{}G", kb / 1024 / 1024)
+            } else {
+                format!("{}T", kb / 1024 / 1024 / 1024)
             }
         };
         let error_information_handle = {
@@ -326,7 +373,11 @@ pub struct MemoryDevice {
     size: MemorySize,
     form_factor: FormFactor,
     memory_type: MemoryType,
+    memory_technology: MemoryTechnology,
     speed: Option<u16>,
+    configured_speed: Option<u16>,
+    rank: Option<u8>,
+    configured_voltage_mv: Option<u16>,
     manufacturer: String,
     serial_number: String,
     asset_tag: String,
@@ -351,6 +402,30 @@ impl From<(Vec<u8>, Vec<String>)> for MemoryDevice {
             if v == 0 { None } else { Some(v) }
         };
 
+        let rank = data
+            .get(23)
+            .copied()
+            .map(|b| b & 0x0F)
+            .filter(|r| *r != 0);
+
+        let configured_speed = data
+            .get(28..30)
+            .and_then(|s| s.try_into().ok())
+            .map(u16::from_le_bytes)
+            .filter(|v| *v != 0);
+
+        let configured_voltage_mv = data
+            .get(34..36)
+            .and_then(|s| s.try_into().ok())
+            .map(u16::from_le_bytes)
+            .filter(|v| *v != 0);
+
+        let memory_technology = data
+            .get(36)
+            .copied()
+            .map(MemoryTechnology::from)
+            .unwrap_or(MemoryTechnology::Unknown);
+
         let manufacturer = data.get(19).copied().map_or_else(
             || "Not Specified".to_string(),
             |b| string_ref(b, &text),
@@ -374,7 +449,11 @@ impl From<(Vec<u8>, Vec<String>)> for MemoryDevice {
             size,
             form_factor,
             memory_type,
+            memory_technology,
             speed,
+            configured_speed,
+            rank,
+            configured_voltage_mv,
             manufacturer,
             serial_number,
             asset_tag,
@@ -385,6 +464,23 @@ impl From<(Vec<u8>, Vec<String>)> for MemoryDevice {
 
 impl MemoryDevice {
     fn render(&self, frame: &mut Frame, block: Rect) {
+        let speed_text = match self.speed {
+            Some(v) => format!("{v} MT/s"),
+            None => "Unknown".to_string(),
+        };
+        let configured_speed_text = match self.configured_speed {
+            Some(v) => format!("{v} MT/s"),
+            None => "Unknown".to_string(),
+        };
+        let rank_text = match self.rank {
+            Some(v) => v.to_string(),
+            None => "Unknown".to_string(),
+        };
+        let voltage_text = match self.configured_voltage_mv {
+            Some(mv) => format_voltage(mv),
+            None => "Unknown".to_string(),
+        };
+
         let rows = vec![
             Row::new(vec![
                 Cell::from("Size").bold(),
@@ -395,15 +491,28 @@ impl MemoryDevice {
                 Cell::from(self.memory_type.to_string()),
             ]),
             Row::new(vec![
+                Cell::from("Technology").bold(),
+                Cell::from(self.memory_technology.to_string()),
+            ]),
+            Row::new(vec![
                 Cell::from("Form Factor").bold(),
                 Cell::from(self.form_factor.to_string()),
             ]),
             Row::new(vec![
+                Cell::from("Rank").bold(),
+                Cell::from(rank_text),
+            ]),
+            Row::new(vec![
                 Cell::from("Speed").bold(),
-                Cell::from(match self.speed {
-                    Some(v) => format!("{v} MT/s"),
-                    None => "Unknown".to_string(),
-                }),
+                Cell::from(speed_text),
+            ]),
+            Row::new(vec![
+                Cell::from("Configured Speed").bold(),
+                Cell::from(configured_speed_text),
+            ]),
+            Row::new(vec![
+                Cell::from("Voltage").bold(),
+                Cell::from(voltage_text),
             ]),
             Row::new(vec![
                 Cell::from("Bank Locator").bold(),
@@ -427,10 +536,16 @@ impl MemoryDevice {
             ]),
         ];
 
-        let widths = [Constraint::Length(16), Constraint::Fill(1)];
+        let widths = [Constraint::Length(18), Constraint::Fill(1)];
         let table = Table::new(rows, widths).block(Block::new().padding(Padding::uniform(1)));
         frame.render_widget(table, block.inner(Margin::new(2, 0)));
     }
+}
+
+fn format_voltage(mv: u16) -> String {
+    let s = format!("{:.3}", mv as f64 / 1000.0);
+    let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+    format!("{trimmed} V")
 }
 
 #[derive(Debug)]
@@ -536,6 +651,26 @@ impl From<u8> for FormFactor {
     }
 }
 
+impl FormFactor {
+    fn kind(&self) -> FormFactorKind {
+        match self {
+            Self::Chip | Self::RowOfChips | Self::Die => FormFactorKind::Soldered,
+            Self::Simm
+            | Self::Sip
+            | Self::Dip
+            | Self::Zip
+            | Self::ProprietaryCard
+            | Self::Dimm
+            | Self::Tsop
+            | Self::Rimm
+            | Self::Sodimm
+            | Self::Srimm
+            | Self::FbDimm => FormFactorKind::Socketed,
+            Self::Other | Self::Unknown => FormFactorKind::Unknown,
+        }
+    }
+}
+
 #[derive(Debug, strum::Display)]
 enum MemoryType {
     #[strum(to_string = "Other")]
@@ -604,6 +739,38 @@ enum MemoryType {
     LpDdr5,
     #[strum(to_string = "HBM3")]
     Hbm3,
+}
+
+#[derive(Debug, strum::Display)]
+enum MemoryTechnology {
+    #[strum(to_string = "Other")]
+    Other,
+    #[strum(to_string = "Unknown")]
+    Unknown,
+    #[strum(to_string = "DRAM")]
+    Dram,
+    #[strum(to_string = "NVDIMM-N")]
+    NvdimmN,
+    #[strum(to_string = "NVDIMM-F")]
+    NvdimmF,
+    #[strum(to_string = "NVDIMM-P")]
+    NvdimmP,
+    #[strum(to_string = "Intel Optane persistent memory")]
+    IntelOptane,
+}
+
+impl From<u8> for MemoryTechnology {
+    fn from(value: u8) -> Self {
+        match value {
+            1 => Self::Other,
+            3 => Self::Dram,
+            4 => Self::NvdimmN,
+            5 => Self::NvdimmF,
+            6 => Self::NvdimmP,
+            7 => Self::IntelOptane,
+            _ => Self::Unknown,
+        }
+    }
 }
 
 impl From<u8> for MemoryType {

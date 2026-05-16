@@ -62,9 +62,18 @@ impl Processors {
             return;
         }
 
+        let max_label = self
+            .list
+            .iter()
+            .map(|p| p.socket_designation.chars().count())
+            .max()
+            .unwrap_or(0) as u16;
+        // 4 = 2 borders + 2 horizontal padding
+        let list_width = max_label.saturating_add(4).max(14);
+
         let body = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(22), Constraint::Fill(1)])
+            .constraints([Constraint::Length(list_width), Constraint::Fill(1)])
             .split(block.inner(Margin::new(2, 1)));
 
         let items: Vec<ListItem<'_>> = self
